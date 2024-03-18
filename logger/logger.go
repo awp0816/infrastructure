@@ -1,76 +1,67 @@
 package logger
 
 import (
-	"encoding/json"
-	"github.com/astaxie/beego/logs"
-	"github.com/pkg/errors"
+	"io"
 	"os"
-	"path/filepath"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-type LogParams struct {
-	Type     string `yaml:"type" json:"-"`             //日志输出格式,console|file
-	Filename string `yaml:"filename" json:"filename"`  //保存的文件名
-	MaxLines int    `yaml:"max_lines" json:"maxlines"` //每个文件保存的最大行数，默认值 1000000
-	MaxSize  int    `yaml:"max_size" json:"maxsize"`   //每个文件保存的最大尺寸，默认值是 1 << 28, 256 MB
-	Daily    bool   `yaml:"daily" json:"daily"`        //是否按照每天 logrotate，默认是 true
-	MaxDays  int    `yaml:"max_days" json:"maxdays"`   //文件最多保存多少天，默认保存 7 天
-	Rotate   bool   `yaml:"rotate" json:"rotate"`      //是否开启 logrotate，默认是 true
-	Level    int    `json:"level"`                     //日志保存的时候的级别，默认是 Trace 级别
-	Desc     string `yaml:"desc" json:"-"`             //日志级别
-	Perm     string `yaml:"perm" json:"perm"`          //日志文件权限
-	Async    bool   `yaml:"async" json:"-"`            //是否异步输出
+type LogConfig struct {
+	Level        string `yaml:"level"`         //日志记录等级
+	Filename     string `yaml:"filename"`      //文件名称
+	MaxSize      int    `yaml:"max_size"`      //文件大小,单位MB
+	MaxAge       int    `yaml:"max_age"`       //保留旧文件的最大天数
+	MaxBackups   int    `yaml:"max_backups"`   //保留旧文件的最大个数
+	LocalTime    bool   `yaml:"local_time"`    //是否使用本地时间,默认UTC
+	Compress     bool   `yaml:"compress"`      //日志是否压缩
+	AsyncConsole bool   `yaml:"async_console"` //是否同步输出控制台
 }
 
-var (
-	Logger *logs.BeeLogger
-)
+var Logger *zap.Logger
 
-func SetupLogger(in LogParams) (err error) {
-
-	//校验日志名称
-	if in.Filename != "" {
-		if filepath.Ext(in.Filename) != ".log" {
-			err = errors.New("文件后缀必须以.log结束")
-			return
-		}
-		dirPath := filepath.Dir(in.Filename)
-		if _, err = os.Stat(dirPath); os.IsNotExist(err) {
-			if err = os.MkdirAll(dirPath, 0755); err != nil {
-				return
+func SetupLogger(logConfig *LogConfig) (err error) {
+	var (
+		NewLogWriter = func() zapcore.WriteSyncer {
+			writer := &lumberjack.Logger{
+				Filename:   logConfig.Filename,
+				MaxSize:    logConfig.MaxSize,
+				MaxAge:     logConfig.MaxAge,
+				MaxBackups: logConfig.MaxBackups,
+				LocalTime:  logConfig.LocalTime,
+				Compress:   logConfig.Compress,
+			}
+			if logConfig.AsyncConsole {
+				return zapcore.AddSync(io.MultiWriter(writer, os.Stdout))
+			} else {
+				return zapcore.AddSync(writer)
 			}
 		}
-	} else {
-		in.Type = logs.AdapterConsole
-	}
-
-	//设置日志级别
-	in.Level = _Level[in.Desc]
-
-	//初始化日志对象
-	Logger = logs.NewLogger(10000)
-	if in.Async {
-		Logger.Async()
-	}
-
-	// 输出log时能显示输出文件名和行号
-	Logger.EnableFuncCallDepth(true)
-	switch in.Type {
-	case logs.AdapterFile:
-		var bytes []byte
-		if bytes, err = json.Marshal(in); err != nil {
-			return
+		GetEncoder = func() zapcore.Encoder {
+			return zapcore.NewJSONEncoder(zapcore.EncoderConfig{
+				TimeKey:        "time",
+				LevelKey:       "level",
+				NameKey:        "logger",
+				CallerKey:      "caller",
+				FunctionKey:    zapcore.OmitKey,
+				MessageKey:     "msg",
+				StacktraceKey:  "stacktrace",
+				LineEnding:     zapcore.DefaultLineEnding,
+				EncodeLevel:    zapcore.CapitalLevelEncoder,
+				EncodeTime:     zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05.000"),
+				EncodeDuration: zapcore.SecondsDurationEncoder,
+				EncodeCaller:   zapcore.ShortCallerEncoder,
+			})
 		}
-		return Logger.SetLogger(logs.AdapterFile, string(bytes))
-	case logs.AdapterConsole:
-		return Logger.SetLogger(logs.AdapterConsole)
+		level = new(zapcore.Level)
+	)
+	if err = level.UnmarshalText([]byte(logConfig.Level)); err != nil {
+		return
 	}
+	zapCore := zapcore.NewCore(GetEncoder(), NewLogWriter(), level)
+	Logger = zap.New(zapCore, zap.AddCaller())
+	zap.ReplaceGlobals(Logger)
 	return
-}
-
-var _Level = map[string]int{
-	"DEBUG":   logs.LevelDebug,
-	"ERROR":   logs.LevelError,
-	"WARNING": logs.LevelWarning,
-	"INFO":    logs.LevelInformational,
 }
