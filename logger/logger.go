@@ -39,7 +39,7 @@ func SetupLogger(logConfig *LogConfig) (err error) {
 				return zapcore.AddSync(writer)
 			}
 		}
-		GetEncoder = func() zapcore.Encoder {
+		NewEncoder = func() zapcore.Encoder {
 			return zapcore.NewJSONEncoder(zapcore.EncoderConfig{
 				TimeKey:        "time",
 				LevelKey:       "level",
@@ -60,7 +60,7 @@ func SetupLogger(logConfig *LogConfig) (err error) {
 	if err = level.UnmarshalText([]byte(logConfig.Level)); err != nil {
 		return
 	}
-	zapCore := zapcore.NewCore(GetEncoder(), NewLogWriter(), level)
+	zapCore := zapcore.NewCore(NewEncoder(), NewLogWriter(), level)
 	Logger = zap.New(zapCore, zap.AddCaller())
 	zap.ReplaceGlobals(Logger)
 	return
