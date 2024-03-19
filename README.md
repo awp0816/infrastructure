@@ -10,5 +10,7 @@ logger:
     });err != nil{
         return
     }
+    defer logger.Logger.Sync()
+    
     logger.Logger.Info("message......")
 ```
