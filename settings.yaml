@@ -1,0 +1,17 @@
+logger:
+  #日志记录等级,DEBUG|INFO|WARN|ERROR|DPANIC|PANIC|FATAL
+  level: DEBUG
+  #日志文件名称
+  filename: /home/ap/safm/log/go/learn_note.log
+  #单个日志文件大小,单位MB
+  max_size: 256
+  #保留旧文件的最大天数
+  max_age: 10
+  #保留旧文件的最大个数
+  max_backups: 10
+  #是否使用本地时间,默认UTC
+  local_time: true
+  #是否压缩日志
+  compress: false
+  #是否同步输出控制台
+  async_console: true
