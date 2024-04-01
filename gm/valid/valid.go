@@ -3,7 +3,6 @@ package valid
 import (
 	"errors"
 	"fmt"
-	"github.com/go-playground/validator/v10"
 	"net/http"
 	"reflect"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/go-playground/locales/en"
 	"github.com/go-playground/locales/zh"
 	ut "github.com/go-playground/universal-translator"
+	"github.com/go-playground/validator/v10"
 	englishTranslations "github.com/go-playground/validator/v10/translations/en"
 	hanTranslations "github.com/go-playground/validator/v10/translations/zh"
 )
@@ -75,15 +75,15 @@ func BindAndValid(c *gin.Context, obj interface{}) (err error) {
 		ok := errors.As(err, &errs)
 		if !ok {
 			c.JSON(http.StatusOK, gin.H{
-				"code":    ErrParams,
-				"message": TextErr[ErrParams],
+				"code":    "000001",
+				"message": "参数错误",
 				"data":    err.Error(),
 			})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"code":    ErrParams,
-			"message": TextErr[ErrParams],
+			"code":    "000001",
+			"message": "参数错误",
 			"data":    errs.Translate(Translator),
 		})
 		return
