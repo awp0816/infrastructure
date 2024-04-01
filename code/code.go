@@ -5,15 +5,15 @@ import "fmt"
 type ErrCode string
 
 const (
-	SUCCESS     = "000000"
-	ErrParams   = "000001"
-	ErrInternal = "999999"
+	SUCCESS     ErrCode = "000000"
+	ErrParams   ErrCode = "000001"
+	ErrInternal ErrCode = "999999"
 )
 
 var TextErr = map[ErrCode]string{
 	SUCCESS:     "SUCCESS",
 	ErrParams:   "参数错误",
-	ErrInternal: "系统异常，请联系管理员",
+	ErrInternal: "系统异常,请联系管理员",
 }
 
 func (e ErrCode) Error() string {
