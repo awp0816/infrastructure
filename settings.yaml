@@ -30,3 +30,5 @@ database:
   idleConn: 2
   #设置打开数据库连接的最大数量
   openConn: 10
+  #自动迁移
+  auto_migrate: true

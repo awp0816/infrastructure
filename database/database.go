@@ -19,6 +19,7 @@ type Database struct {
 	MaxIdleConns int    `yaml:"idleConn"`
 	MaxOpenConns int    `yaml:"openConn"`
 	MaxLifeTime  int    `yaml:"lifeTime"`
+	AutoMigrate  bool   `yaml:"auto_migrate"`
 }
 
 func SetupDatabase(l *zap.Logger, inParams Database) (dbConn *gorm.DB, err error) {
