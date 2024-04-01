@@ -32,10 +32,3 @@ require (
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-//go: finding module for package github.com/awp0816/infrastructure/code
-//github.com/awp0816/infrastructure/gm/valid imports
-//	github.com/awp0816/infrastructure/code: module github.com/awp0816/infrastructure@latest found (v0.0.0-20240329093013-c89d4fd8a76e), but does not contain package github.com/awp0816/infrastructure/code
-//replace (
-//	source latest => target latest
-//)

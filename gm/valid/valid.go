@@ -28,11 +28,12 @@ var (
 func SetLanguage() gin.HandlerFunc {
 	return func(context *gin.Context) {
 		language := context.Request.Header.Get("Accept-Language")
-		if language == "" {
-			language = han
-		}
 		if strings.Contains(language, english) {
 			Language = english
+		} else if strings.Contains(language, han) {
+			Language = han
+		} else {
+			Language = han
 		}
 	}
 }
@@ -69,7 +70,8 @@ func RegisterTranslate(locale string) (err error) {
 	return
 }
 
-func BindAndValid(c *gin.Context, obj interface{}) (err error) {
+// _BindAndValid 这里因错误码个人定义不同,暂时不提供使用,只提供具体示例
+func _BindAndValid(c *gin.Context, obj interface{}) (err error) {
 	if err = c.ShouldBind(obj); err != nil {
 		var errs validator.ValidationErrors
 		ok := errors.As(err, &errs)
@@ -118,7 +120,7 @@ func example() {
 			err error
 		)
 		//更多参数验证参考: https://blog.csdn.net/zhaozuoyou/article/details/127812519
-		if err = BindAndValid(ctx, &request); err != nil {
+		if err = _BindAndValid(ctx, &request); err != nil {
 			//记录日志
 			return
 		}
