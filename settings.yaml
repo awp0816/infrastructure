@@ -15,3 +15,18 @@ logger:
   compress: false
   #是否同步输出控制台
   async_console: true
+
+database:
+  #数据库驱动名称,mysql|sqlite
+  driver: sqlite
+  #连接字符串
+  #mysql------>username:password@tcp(ip:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
+  dsn: /home/ap/safm/ccbc/conf/learn_note.db
+  #是否打印sql语句
+  debug: true
+  #设置连接可复用的最大时间单位秒
+  lifeTime: 40
+  #设置空闲连接池中连接的最大数量
+  idleConn: 2
+  #设置打开数据库连接的最大数量
+  openConn: 10
