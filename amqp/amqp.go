@@ -8,14 +8,10 @@ import (
 	"github.com/streadway/amqp"
 )
 
-type ClientI interface {
-	Publish(amqpCtrl Ctrl, bytes []byte) error
-	Subscribe(amqpCtrl Ctrl, handler func(amqp.Delivery)) error
-}
-
-type amqpClient struct {
-	amqpConn    *amqp.Connection
-	amqpChannel *amqp.Channel
+type Client struct {
+	amqpConn     *amqp.Connection //链接
+	amqpUrl      string           //连接地址
+	intervalTime int64            //断线重连检测时间,单位秒,默认5
 }
 
 type Ctrl struct {
@@ -29,30 +25,48 @@ type Ctrl struct {
 	ConsumerName    string //消费者名称
 }
 
-func NewAmqpClient(amqpUrl string, amqpConfig amqp.Config, intervalTime int64) (amqpClientI ClientI, err error) {
-	var aClient *amqpClient
-	if aClient, err = _AmqpReDial(amqpUrl, amqpConfig); err != nil {
-		return
-	}
-	amqpClientI = aClient
+var AmqpClient = new(Client)
+
+func NewAmqpClient(amqpUrl string, intervalTime int64) *Client {
 	if intervalTime <= 0 {
 		intervalTime = 5
 	}
-	ticker := time.NewTicker(time.Second * time.Duration(intervalTime))
+	AmqpClient = &Client{
+		amqpConn:     nil,
+		amqpUrl:      amqpUrl,
+		intervalTime: intervalTime,
+	}
+	return AmqpClient
+}
+
+func (a *Client) Keepalive() (err error) {
+	var amqpConn *amqp.Connection
+	if amqpConn, err = amqp.Dial(a.amqpUrl); err != nil {
+		return
+	}
+	a.amqpConn = amqpConn
 	go func() {
+		defer func() {
+			if e := recover(); e != nil {
+				log.Println("AmqpClient Keepalive Panic:", e)
+			}
+		}()
+		ticker := time.NewTicker(time.Second * time.Duration(a.intervalTime))
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				if aClient.amqpConn == nil || aClient.amqpConn.IsClosed() {
+				if a.amqpConn == nil || a.amqpConn.IsClosed() {
 					var (
-						mqClient *amqpClient
-						dialErr  error
+						aConn   *amqp.Connection
+						dialErr error
 					)
-					if mqClient, dialErr = _AmqpReDial(amqpUrl, amqpConfig); dialErr != nil {
-						log.Println(amqp.ErrClosed.Error())
+					if aConn, dialErr = amqp.Dial(a.amqpUrl); dialErr != nil {
+						log.Printf("amqp auto connection failed,reason is:%v", dialErr)
 						continue
 					}
-					aClient = mqClient
+					log.Println("amqp auto connection success.")
+					a.amqpConn = aConn
 				}
 			}
 		}
@@ -60,37 +74,24 @@ func NewAmqpClient(amqpUrl string, amqpConfig amqp.Config, intervalTime int64) (
 	return
 }
 
-func _AmqpReDial(amqpUrl string, amqpConfig amqp.Config) (*amqpClient, error) {
-	var (
-		amqpConn    *amqp.Connection
-		amqpChannel *amqp.Channel
-		err         error
-	)
-
-	if amqpConn, err = amqp.DialConfig(amqpUrl, amqpConfig); err != nil {
-		return nil, err
-	}
-	if amqpChannel, err = amqpConn.Channel(); err != nil {
-		return nil, err
-	}
-	return &amqpClient{
-		amqpConn:    amqpConn,
-		amqpChannel: amqpChannel,
-	}, nil
-}
-
 // Publish 发布消息
-func (a *amqpClient) Publish(amqpCtrl Ctrl, bytes []byte) (err error) {
-	if a.amqpConn == nil || a.amqpConn.IsClosed() {
-		err = errors.New(amqp.ErrClosed.Error())
-		return
-	}
+func (a *Client) Publish(amqpCtrl Ctrl, bytes []byte) (err error) {
 	if bytes == nil || len(bytes) <= 0 {
-		err = errors.New("bytes is empty!.")
+		err = errors.New("bytes is empty.")
 		return
 	}
+	var amqpChannel *amqp.Channel
+	if amqpChannel, err = a.amqpConn.Channel(); err != nil {
+		return
+	}
+	defer func() {
+		if e := amqpChannel.Close(); e != nil {
+			log.Printf("send message: %s,amqpChannel close failed.reason is :%v", string(bytes), e)
+			return
+		}
+	}()
 	//声明交换机
-	if err = a.amqpChannel.ExchangeDeclare(amqpCtrl.ExchangeName, amqpCtrl.ExchangeKind, amqpCtrl.ExchangeDurable, false, false, false, nil); err != nil {
+	if err = amqpChannel.ExchangeDeclare(amqpCtrl.ExchangeName, amqpCtrl.ExchangeKind, amqpCtrl.ExchangeDurable, false, false, false, nil); err != nil {
 		return
 	}
 	//声明队列
@@ -102,32 +103,38 @@ func (a *amqpClient) Publish(amqpCtrl Ctrl, bytes []byte) (err error) {
 	  	   如果客户端尝试建立一个已经存在的消息队列,RabbitMQ不会做任何事情,并返回客户端建立成功的
 	*/
 	var queue amqp.Queue
-	if queue, err = a.amqpChannel.QueueDeclare(amqpCtrl.QueueName, amqpCtrl.QueueDurable, false, false, false, nil); err != nil {
+	if queue, err = amqpChannel.QueueDeclare(amqpCtrl.QueueName, amqpCtrl.QueueDurable, false, false, false, nil); err != nil {
 		return
 	}
 	//绑定队列
 	if amqpCtrl.IsBindQueue {
-		if err = a.amqpChannel.QueueBind(queue.Name, amqpCtrl.RoutingKey, amqpCtrl.ExchangeName, false, nil); err != nil {
+		if err = amqpChannel.QueueBind(queue.Name, amqpCtrl.RoutingKey, amqpCtrl.ExchangeName, false, nil); err != nil {
 			return
 		}
 	}
 	//发布消息
-	return a.amqpChannel.Publish(amqpCtrl.ExchangeName, amqpCtrl.RoutingKey, false, false, amqp.Publishing{
+	return amqpChannel.Publish(amqpCtrl.ExchangeName, amqpCtrl.RoutingKey, false, false, amqp.Publishing{
 		Body: bytes,
 	})
 }
 
 // Subscribe 订阅消息
-func (a *amqpClient) Subscribe(amqpCtrl Ctrl, handler func(amqp.Delivery)) (err error) {
-	if a.amqpConn == nil || a.amqpConn.IsClosed() {
-		err = errors.New(amqp.ErrClosed.Error())
+func (a *Client) Subscribe(amqpCtrl Ctrl, handler func(amqp.Delivery)) (err error) {
+	var amqpChannel *amqp.Channel
+	if amqpChannel, err = a.amqpConn.Channel(); err != nil {
 		return
 	}
-	if _, err = a.amqpChannel.QueueDeclare(amqpCtrl.QueueName, amqpCtrl.QueueDurable, false, false, false, nil); err != nil {
+	defer func() {
+		if e := amqpChannel.Close(); e != nil {
+			log.Printf("consume message,amqpChannel close failed.reason is :%v", e)
+			return
+		}
+	}()
+	if _, err = amqpChannel.QueueDeclare(amqpCtrl.QueueName, amqpCtrl.QueueDurable, false, false, false, nil); err != nil {
 		return
 	}
 	var msgChan <-chan amqp.Delivery
-	if msgChan, err = a.amqpChannel.Consume(amqpCtrl.QueueName, amqpCtrl.ConsumerName, true, false, false, false, nil); err != nil {
+	if msgChan, err = amqpChannel.Consume(amqpCtrl.QueueName, amqpCtrl.ConsumerName, true, false, false, false, nil); err != nil {
 		return
 	}
 	for delivery := range msgChan {
@@ -137,10 +144,7 @@ func (a *amqpClient) Subscribe(amqpCtrl Ctrl, handler func(amqp.Delivery)) (err 
 }
 
 // Close 资源释放
-func (a *amqpClient) Close() {
-	if a.amqpChannel != nil {
-		_ = a.amqpChannel.Close()
-	}
+func (a *Client) Close() {
 	if a.amqpConn != nil {
 		_ = a.amqpConn.Close()
 	}
