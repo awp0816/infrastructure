@@ -15,6 +15,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	englishTranslations "github.com/go-playground/validator/v10/translations/en"
 	hanTranslations "github.com/go-playground/validator/v10/translations/zh"
+	"golang.org/x/text/language"
 )
 
 var (
@@ -25,12 +26,25 @@ var (
 )
 
 // SetLanguage 设置翻译器语言,默认中文
-func SetLanguage() gin.HandlerFunc {
+func SetLanguage(languages ...language.Tag) gin.HandlerFunc {
 	return func(context *gin.Context) {
-		language := context.Request.Header.Get("Accept-Language")
-		if strings.Contains(language, english) {
+		if len(languages) <= 0 {
+			languages = []language.Tag{
+				language.Chinese, //中文
+				language.English, //英语
+			}
+		}
+		matcher := language.NewMatcher(languages)
+		sl, _, e := language.ParseAcceptLanguage(context.Request.Header.Get("Accept-Language"))
+		if e != nil {
+			Language = han
+			return
+		}
+		//从用户首选语言列表中选择最匹配的语言---受languages参数影响
+		b, _, _ := matcher.Match(sl...)
+		if strings.Contains(b.String(), english) {
 			Language = english
-		} else if strings.Contains(language, han) {
+		} else if strings.Contains(b.String(), han) {
 			Language = han
 		} else {
 			Language = han
