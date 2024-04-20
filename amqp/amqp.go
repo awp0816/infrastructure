@@ -12,6 +12,7 @@ type Client struct {
 	amqpConn     *amqp.Connection //链接
 	amqpUrl      string           //连接地址
 	intervalTime int64            //断线重连检测时间,单位秒,默认5
+	amqpClose    chan bool        //关闭通知
 }
 
 type Ctrl struct {
@@ -35,6 +36,7 @@ func NewAmqpClient(amqpUrl string, intervalTime int64) *Client {
 		amqpConn:     nil,
 		amqpUrl:      amqpUrl,
 		intervalTime: intervalTime,
+		amqpClose:    make(chan bool),
 	}
 	return AmqpClient
 }
@@ -68,6 +70,8 @@ func (a *Client) Keepalive() (err error) {
 					log.Println("amqp auto connection success.")
 					a.amqpConn = aConn
 				}
+			case <-a.amqpClose:
+				break
 			}
 		}
 	}()
@@ -148,4 +152,5 @@ func (a *Client) Close() {
 	if a.amqpConn != nil {
 		_ = a.amqpConn.Close()
 	}
+	close(a.amqpClose)
 }
