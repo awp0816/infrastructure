@@ -134,8 +134,20 @@ func (a *Client) Subscribe(amqpCtrl Ctrl, handler func(amqp.Delivery)) (err erro
 			return
 		}
 	}()
-	if _, err = amqpChannel.QueueDeclare(amqpCtrl.QueueName, amqpCtrl.QueueDurable, false, false, false, nil); err != nil {
+	//声明交换机
+	if err = amqpChannel.ExchangeDeclare(amqpCtrl.ExchangeName, amqpCtrl.ExchangeKind, amqpCtrl.ExchangeDurable, false, false, false, nil); err != nil {
 		return
+	}
+	//声明队列
+	var queue amqp.Queue
+	if queue, err = amqpChannel.QueueDeclare(amqpCtrl.QueueName, amqpCtrl.QueueDurable, false, false, false, nil); err != nil {
+		return
+	}
+	//绑定队列
+	if amqpCtrl.IsBindQueue {
+		if err = amqpChannel.QueueBind(queue.Name, amqpCtrl.RoutingKey, amqpCtrl.ExchangeName, false, nil); err != nil {
+			return
+		}
 	}
 	var msgChan <-chan amqp.Delivery
 	if msgChan, err = amqpChannel.Consume(amqpCtrl.QueueName, amqpCtrl.ConsumerName, true, false, false, false, nil); err != nil {
